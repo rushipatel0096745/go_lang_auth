@@ -1,0 +1,141 @@
+package repositories
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"crudapi/models"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var ErrNotFound = errors.New("not found")
+
+type UserRepository struct {
+	db *pgxpool.Pool
+}
+
+func NewUserRepository(db *pgxpool.Pool) *UserRepository {
+	return &UserRepository{db: db}
+}
+
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	user := &models.User{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, name, avatar_url, provider, password_hash, google_id, email_verified, created_at, updated_at
+         FROM users WHERE email = $1`, email,
+	).Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Provider,
+		&user.PasswordHash, &user.GoogleID, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *UserRepository) FindByGoogleID(ctx context.Context, googleID string) (*models.User, error) {
+	user := &models.User{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, name, avatar_url, provider, password_hash, google_id, email_verified, created_at, updated_at
+         FROM users WHERE google_id = $1`, googleID,
+	).Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Provider,
+		&user.PasswordHash, &user.GoogleID, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *UserRepository) FindByID(ctx context.Context, id string) (*models.User, error) {
+	user := &models.User{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, name, avatar_url, provider, password_hash, google_id, email_verified, created_at, updated_at
+         FROM users WHERE id = $1`, id,
+	).Scan(&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Provider,
+		&user.PasswordHash, &user.GoogleID, &user.EmailVerified, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
+	return r.db.QueryRow(ctx,
+		`INSERT INTO users (email, name, avatar_url, provider, password_hash, google_id, email_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, created_at, updated_at`,
+		user.Email, user.Name, user.AvatarURL, user.Provider,
+		user.PasswordHash, user.GoogleID, user.EmailVerified,
+	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+}
+
+// UpsertGoogleUser handles both new Google users and existing ones
+func (r *UserRepository) UpsertGoogleUser(ctx context.Context, user *models.User) (*models.User, error) {
+	result := &models.User{}
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO users (email, name, avatar_url, provider, google_id, email_verified)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (email) DO UPDATE SET
+             name = EXCLUDED.name,
+             avatar_url = EXCLUDED.avatar_url,
+             google_id = EXCLUDED.google_id,
+             email_verified = TRUE,
+             updated_at = NOW()
+         RETURNING id, email, name, avatar_url, provider, password_hash, google_id, email_verified, created_at, updated_at`,
+		user.Email, user.Name, user.AvatarURL, user.Provider, user.GoogleID, true,
+	).Scan(&result.ID, &result.Email, &result.Name, &result.AvatarURL, &result.Provider,
+		&result.PasswordHash, &result.GoogleID, &result.EmailVerified, &result.CreatedAt, &result.UpdatedAt)
+	return result, err
+}
+
+// Refresh token methods
+func (r *UserRepository) SaveRefreshToken(ctx context.Context, rt *models.RefreshToken) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+		rt.UserID, rt.TokenHash, rt.ExpiresAt,
+	)
+	return err
+}
+
+func (r *UserRepository) FindRefreshToken(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
+	rt := &models.RefreshToken{}
+	err := r.db.QueryRow(ctx,
+		`SELECT id, user_id, token_hash, expires_at FROM refresh_tokens WHERE token_hash = $1`,
+		tokenHash,
+	).Scan(&rt.ID, &rt.UserID, &rt.TokenHash, &rt.ExpiresAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return rt, nil
+}
+
+func (r *UserRepository) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM refresh_tokens WHERE token_hash = $1`, tokenHash)
+	return err
+}
+
+func (r *UserRepository) DeleteAllRefreshTokens(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
+	return err
+}
+
+func (r *UserRepository) CleanExpiredTokens(ctx context.Context) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM refresh_tokens WHERE expires_at < $1`, time.Now())
+	return err
+}
