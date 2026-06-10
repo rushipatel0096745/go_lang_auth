@@ -118,7 +118,7 @@ func main() {
 	// Wire up layers
 	userRepo := repositories.NewUserRepository(pool)
 	authService := services.NewAuthService(userRepo, cfg)
-	authHandler := handlers.NewAuthHandler(authService, cfg)
+	authHandler := handlers.NewAuthHandler(authService, cfg, userRepo)
 
 	router := gin.Default()
 
