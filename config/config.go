@@ -28,19 +28,24 @@ func Load() *Config {
 		log.Println("No .env file found, using environment variables")
 	}
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	return &Config{
-		Port:               getEnv("PORT", ":8080"),
+		Port:               ":" + port,
 		GinMode:            getEnv("GIN_MODE", "debug"),
 		AppName:            getEnv("APP_NAME", "album-api"),
 		DbUrl:              getEnv("DB_URL", ""),
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
-        JWTSecret:          os.Getenv("JWT_SECRET"),
-        JWTExpiry:          15, // 15-minute access tokens
-        RefreshExpiry:      30, // 30-day refresh tokens
-        GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-        GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-        GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-        AppBaseURL:         os.Getenv("APP_BASE_URL"),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		JWTExpiry:          15, // 15-minute access tokens
+		RefreshExpiry:      30, // 30-day refresh tokens
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+		AppBaseURL:         os.Getenv("APP_BASE_URL"),
 	}
 }
 
